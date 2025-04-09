@@ -1,0 +1,139 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CodeBuildでビルドアクション実行後、すぐに反映せず、定時刻に反映する構成例
+
+Parameters:
+  SourceBucket:
+    Type: String
+    Description: ソースコードが格納されている S3 バケット名
+  DestinationBucket:
+    Type: String
+    Description: 反映先の S3 バケット名
+  SourceObjectKey:
+    Type: String
+    Description: ソースコードオブジェクトのキー（例: source.zip）
+
+Resources:
+  # CodeBuild用サービスロール
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub arn:aws:s3:::${SourceBucket}
+                  - !Sub arn:aws:s3:::${SourceBucket}/*
+                  - !Sub arn:aws:s3:::${DestinationBucket}
+                  - !Sub arn:aws:s3:::${DestinationBucket}/*
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  # ビルド用 CodeBuild プロジェクト（BuildProject）
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: BuildProject
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Source:
+        Type: S3
+        Location: !Sub "${SourceBucket}/${SourceObjectKey}"
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+      Artifacts:
+        Type: NO_ARTIFACTS
+      TimeoutInMinutes: 10
+      BuildSpec: |
+        version: 0.2
+        phases:
+          build:
+            commands:
+              - echo "ビルド処理を実行します"
+              # ここに各種ビルドコマンドを記述
+              - echo "ビルド完了。結果は即時反映されません。"
+        # ※更新対象のデータはソースバケット上に保持
+
+  # デプロイ用 CodeBuild プロジェクト（DeployProject）
+  DeployProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: DeployProject
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Source:
+        Type: NO_SOURCE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+      Artifacts:
+        Type: NO_ARTIFACTS
+      TimeoutInMinutes: 10
+      BuildSpec: |
+        version: 0.2
+        phases:
+          build:
+            commands:
+              - echo "定時刻にデプロイ処理を実行します"
+              - aws s3 sync s3://${SourceBucket} s3://${DestinationBucket} --delete
+
+  # CloudWatch Events 用ロール（DeployProjectを起動する権限を付与）
+  CloudWatchEventsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CloudWatchEventsForDeploy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CloudWatchEventsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: codebuild:StartBuild
+                Resource: !GetAtt DeployProject.Arn
+
+  # CloudWatch Events ルールで定時（例: 毎日午前2時）に DeployProject を実行
+  DeployScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: ScheduledDeployRule
+      ScheduleExpression: "cron(0 2 * * ? *)"
+      Targets:
+        - Id: "DeployProjectTarget"
+          Arn: !Sub "arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${DeployProject}"
+          RoleArn: !GetAtt CloudWatchEventsRole.Arn
+          Input: "{}"
+
+Outputs:
+  BuildProjectName:
+    Value: !Ref BuildProject
+    Description: CodeBuild ビルドプロジェクトの名前
+  DeployProjectName:
+    Value: !Ref DeployProject
+    Description: CodeBuild デプロイプロジェクトの名前
