@@ -1,0 +1,64 @@
+#!/bin/bash
+
+# 対象リージョンを指定（例: 東京の場合 "ap-northeast-1"）
+TARGET_REGION="ap-northeast-1"
+
+# 出力ファイル（初期化）
+OUTPUT_FILE="result.txt"
+> "$OUTPUT_FILE"
+
+# 対象のバケット系コマンド一覧
+bucket_commands=(
+  "get-bucket-accelerate-configuration"
+  "get-bucket-acl"
+  "get-bucket-cors"
+  "get-bucket-encryption"
+  "get-bucket-lifecycle-configuration"
+  "get-bucket-location"
+  "get-bucket-logging"
+  "get-bucket-notification-configuration"
+  "get-bucket-ownership-controls"
+  "get-bucket-policy"
+  "get-bucket-policy-status"
+  "get-bucket-replication"
+  "get-bucket-request-payment"
+  "get-bucket-tagging"
+  "get-bucket-versioning"
+  "get-bucket-website"
+  "get-public-access-block"
+)
+
+echo "ターゲットリージョン: $TARGET_REGION" >> "$OUTPUT_FILE"
+echo "------------------------------------------" >> "$OUTPUT_FILE"
+
+# 全バケット一覧の取得
+buckets=$(aws s3api list-buckets --query "Buckets[].Name" --output text)
+
+# 各バケットについて、リージョンをチェックして対象の場合のみ処理
+for bucket in $buckets; do
+    echo "========== バケット: $bucket ==========" >> "$OUTPUT_FILE"
+
+    # バケットのリージョン取得 (出力が空または "None" なら US East)
+    bucket_region=$(aws s3api get-bucket-location --bucket "$bucket" --output text 2>/dev/null)
+    if [ "$bucket_region" = "None" ] || [ -z "$bucket_region" ]; then
+        bucket_region="us-east-1"
+    fi
+
+    echo "リージョン: $bucket_region" >> "$OUTPUT_FILE"
+
+    # 対象リージョンのバケットのみ処理
+    if [ "$bucket_region" = "$TARGET_REGION" ]; then
+        for cmd in "${bucket_commands[@]}"; do
+            echo "----- コマンド: $cmd -----" >> "$OUTPUT_FILE"
+            # 各コマンドの出力 (エラー出力もキャプチャ)
+            aws s3api "$cmd" --bucket "$bucket" --region "$TARGET_REGION" >> "$OUTPUT_FILE" 2>&1
+            echo "" >> "$OUTPUT_FILE"
+        done
+    else
+        echo "※ このバケットは対象リージョン外のためスキップします。" >> "$OUTPUT_FILE"
+    fi
+
+    echo "" >> "$OUTPUT_FILE"
+done
+
+echo "完了: 出力結果は $OUTPUT_FILE に保存されました。"
