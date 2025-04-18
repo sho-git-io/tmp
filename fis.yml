@@ -1,0 +1,408 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AWS Fault Injection Simulator (FIS) experiment templates covering all common
+  fault‑injection actions. Replace the placeholder ARNs/names below with your
+  actual resources and deploy.
+
+Resources:
+  ### IAM Role for AWS FIS ###
+  FISExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: FISExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: fis.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSFaultInjectionSimulatorFullAccess
+
+  ### 1. DynamoDB global-table-pause-replication ###
+  FISExpTemplateDynamoDBGlobalTablePauseReplication:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: "Pause replication on DynamoDB global table"
+      RoleArn: !GetAtt FISExecutionRole.Arn
+      StopConditions:
+        - Source: none
+      Targets:
+        TableTarget:
+          ResourceType: aws:dynamodb:table
+          ResourceArns:
+            - "arn:aws:dynamodb:ap-northeast-1:123456789012:table/YourGlobalTableName"
+          SelectionMode: ALL
+      Actions:
+        DynamoDBPauseReplication:
+          ActionId: aws:dynamodb:global-table-pause-replication
+          Description: "Pause replication"
+          Targets:
+            TableTarget: TableTarget
+      Tags:
+        ActionRef: "aws:dynamodb:global-table-pause-replication"
+
+  ### 2. ECS stop-task ###
+  FISExpTemplateECSStopTask:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: "Stop all tasks in an ECS cluster"
+      RoleArn: !GetAtt FISExecutionRole.Arn
+      StopConditions:
+        - Source: none
+      Targets:
+        ECSTasks:
+          ResourceType: aws:ecs:task
+          SelectionMode: ALL
+          Filters:
+            - Path: clusterArn
+              Values:
+                - "arn:aws:ecs:ap-northeast-1:123456789012:cluster/YourClusterName"
+      Actions:
+        ECSStopTask:
+          ActionId: aws:ecs:stop-task
+          Description: "Stop tasks"
+          Targets:
+            Tasks: ECSTasks
+          Parameters:
+            clusterArn: "arn:aws:ecs:ap-northeast-1:123456789012:cluster/YourClusterName"
+      Tags:
+        ActionRef: "aws:ecs:stop-task"
+
+  ### 3. ECS task-cpu-stress ###
+  FISExpTemplateECSTaskCPUStress:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: "Inject CPU stress into ECS tasks"
+      RoleArn: !GetAtt FISExecutionRole.Arn
+      StopConditions:
+        - Source: none
+      Targets:
+        ECSTasksCPU:
+          ResourceType: aws:ecs:task
+          SelectionMode: ALL
+          Filters:
+            - Path: clusterArn
+              Values:
+                - "arn:aws:ecs:ap-northeast-1:123456789012:cluster/YourClusterName"
+      Actions:
+        ECSTaskCPUStress:
+          ActionId: aws:ecs:task-cpu-stress
+          Description: "CPU stress"
+          Targets:
+            Tasks: ECSTasksCPU
+          Parameters:
+            CPU: "80"
+            Duration: "60"
+      Tags:
+        ActionRef: "aws:ecs:task-cpu-stress"
+
+  ### 4. ECS task-io-stress ###
+  FISExpTemplateECSTaskIOStress:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: "Inject IO stress into ECS tasks"
+      RoleArn: !GetAtt FISExecutionRole.Arn
+      StopConditions:
+        - Source: none
+      Targets:
+        ECSTasksIO:
+          ResourceType: aws:ecs:task
+          SelectionMode: ALL
+          Filters:
+            - Path: clusterArn
+              Values:
+                - "arn:aws:ecs:ap-northeast-1:123456789012:cluster/YourClusterName"
+      Actions:
+        ECSTaskIOStress:
+          ActionId: aws:ecs:task-io-stress
+          Description: "IO stress"
+          Targets:
+            Tasks: ECSTasksIO
+          Parameters:
+            IOPercentage: "80"
+            Duration: "60"
+      Tags:
+        ActionRef: "aws:ecs:task-io-stress"
+
+  ### 5. ECS task-kill-process ###
+  FISExpTemplateECSTaskKillProcess:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: "Kill a process inside ECS tasks"
+      RoleArn: !GetAtt FISExecutionRole.Arn
+      StopConditions:
+        - Source: none
+      Targets:
+        ECSTasksProc:
+          ResourceType: aws:ecs:task
+          SelectionMode: ALL
+          Filters:
+            - Path: clusterArn
+              Values:
+                - "arn:aws:ecs:ap-northeast-1:123456789012:cluster/YourClusterName"
+      Actions:
+        ECSTaskKillProcess:
+          ActionId: aws:ecs:task-kill-process
+          Description: "Kill process"
+          Targets:
+            Tasks: ECSTasksProc
+          Parameters:
+            processName: "YourProcessName"
+      Tags:
+        ActionRef: "aws:ecs:task-kill-process"
+
+  ### 6. ECS task-network-blackhole-port ###
+  FISExpTemplateECSTaskNetworkBlackholePort:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: "Drop traffic on a port in ECS tasks"
+      RoleArn: !GetAtt FISExecutionRole.Arn
+      StopConditions:
+        - Source: none
+      Targets:
+        ECSTasksNetBH:
+          ResourceType: aws:ecs:task
+          SelectionMode: ALL
+          Filters:
+            - Path: clusterArn
+              Values:
+                - "arn:aws:ecs:ap-northeast-1:123456789012:cluster/YourClusterName"
+      Actions:
+        ECSTaskNetworkBlackholePort:
+          ActionId: aws:ecs:task-network-blackhole-port
+          Description: "Blackhole port"
+          Targets:
+            Tasks: ECSTasksNetBH
+          Parameters:
+            port: "8080"
+            duration: "60"
+      Tags:
+        ActionRef: "aws:ecs:task-network-blackhole-port"
+
+  ### 7. ECS task-network-latency ###
+  FISExpTemplateECSTaskNetworkLatency:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: "Add latency to ECS tasks"
+      RoleArn: !GetAtt FISExecutionRole.Arn
+      StopConditions:
+        - Source: none
+      Targets:
+        ECSTasksLatency:
+          ResourceType: aws:ecs:task
+          SelectionMode: ALL
+          Filters:
+            - Path: clusterArn
+              Values:
+                - "arn:aws:ecs:ap-northeast-1:123456789012:cluster/YourClusterName"
+      Actions:
+        ECSTaskNetworkLatency:
+          ActionId: aws:ecs:task-network-latency
+          Description: "Inject latency"
+          Targets:
+            Tasks: ECSTasksLatency
+          Parameters:
+            latency: "100"
+            duration: "60"
+      Tags:
+        ActionRef: "aws:ecs:task-network-latency"
+
+  ### 8. ECS task-network-packet-loss ###
+  FISExpTemplateECSTaskNetworkPacketLoss:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: "Inject packet loss into ECS tasks"
+      RoleArn: !GetAtt FISExecutionRole.Arn
+      StopConditions:
+        - Source: none
+      Targets:
+        ECSTasksLoss:
+          ResourceType: aws:ecs:task
+          SelectionMode: ALL
+          Filters:
+            - Path: clusterArn
+              Values:
+                - "arn:aws:ecs:ap-northeast-1:123456789012:cluster/YourClusterName"
+      Actions:
+        ECSTaskNetworkPacketLoss:
+          ActionId: aws:ecs:task-network-packet-loss
+          Description: "Packet loss"
+          Targets:
+            Tasks: ECSTasksLoss
+          Parameters:
+            packetLossPercentage: "30"
+            duration: "60"
+      Tags:
+        ActionRef: "aws:ecs:task-network-packet-loss"
+
+  ### 9. ECS drain-container-instances ###
+  FISExpTemplateECSDrainContainerInstances:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: "Drain an ECS container instance"
+      RoleArn: !GetAtt FISExecutionRole.Arn
+      StopConditions:
+        - Source: none
+      Targets:
+        ContainerInstanceTarget:
+          ResourceType: aws:ecs:container-instance
+          ResourceArns:
+            - "arn:aws:ecs:ap-northeast-1:123456789012:container-instance/YourClusterName/YourInstanceId"
+          SelectionMode: ALL
+      Actions:
+        ECSDrainContainerInstances:
+          ActionId: aws:ecs:drain-container-instances
+          Description: "Drain container instance"
+          Targets:
+            ContainerInstances: ContainerInstanceTarget
+          Parameters:
+            clusterArn: "arn:aws:ecs:ap-northeast-1:123456789012:cluster/YourClusterName"
+      Tags:
+        ActionRef: "aws:ecs:drain-container-instances"
+
+  ### 10. Lambda invocation-add-delay ###
+  FISExpTemplateLambdaInvocationAddDelay:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: "Inject invocation delay into Lambda"
+      RoleArn: !GetAtt FISExecutionRole.Arn
+      StopConditions:
+        - Source: none
+      Targets:
+        LambdaDelayTarget:
+          ResourceType: aws:lambda:function
+          ResourceArns:
+            - "arn:aws:lambda:ap-northeast-1:123456789012:function:YourFunctionName"
+          SelectionMode: ALL
+      Actions:
+        LambdaInvocationAddDelay:
+          ActionId: aws:lambda:invocation-add-delay
+          Description: "Add delay"
+          Targets:
+            MyLambda: LambdaDelayTarget
+          Parameters:
+            delay: "1000"
+            duration: "60"
+      Tags:
+        ActionRef: "aws:lambda:invocation-add-delay"
+
+  ### 11. Network disrupt-connectivity ###
+  FISExpTemplateNetworkDisruptConnectivity:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: "Disrupt network connectivity in a VPC"
+      RoleArn: !GetAtt FISExecutionRole.Arn
+      StopConditions:
+        - Source: none
+      Targets:
+        SubnetByVpc:
+          ResourceType: aws:ec2:subnet
+          SelectionMode: ALL
+          Filters:
+            - Path: vpcId
+              Values:
+                - "vpc-EXAMPLE12345"
+      Actions:
+        NetworkDisruptConnectivity:
+          ActionId: aws:network:disrupt-connectivity
+          Description: "Blackhole VPC subnets"
+          Targets:
+            MyNetwork: SubnetByVpc
+          Parameters:
+            disruptionType: blackhole
+            duration: "60"
+      Tags:
+        ActionRef: "aws:network:disrupt-connectivity"
+
+  ### 12. Network route-table-disrupt-cross-region-connectivity ###
+  FISExpTemplateNetworkRouteTableDisruptCrossRegionConnectivity:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: "Disrupt cross-region routing in VPC"
+      RoleArn: !GetAtt FISExecutionRole.Arn
+      StopConditions:
+        - Source: none
+      Targets:
+        SubnetByVpc2:
+          ResourceType: aws:ec2:subnet
+          SelectionMode: ALL
+          Filters:
+            - Path: vpcId
+              Values:
+                - "vpc-EXAMPLE12345"
+      Actions:
+        NetworkRouteTableDisruptCrossRegionConnectivity:
+          ActionId: aws:network:route-table-disrupt-cross-region-connectivity
+          Description: "Modify route tables"
+          Targets:
+            MyNetwork: SubnetByVpc2
+          Parameters:
+            duration: "120"
+      Tags:
+        ActionRef: "aws:network:route-table-disrupt-cross-region-connectivity"
+
+  ### 13. RDS failover-db-cluster ###
+  FISExpTemplateRDSFailoverDBCluster:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: "Fail over an RDS DB cluster"
+      RoleArn: !GetAtt FISExecutionRole.Arn
+      StopConditions:
+        - Source: none
+      Targets:
+        RDSClusterTarget:
+          ResourceType: aws:rds:db-cluster
+          ResourceArns:
+            - "arn:aws:rds:ap-northeast-1:123456789012:cluster:YourRDSClusterID"
+          SelectionMode: ALL
+      Actions:
+        RDSFailoverDBCluster:
+          ActionId: aws:rds:failover-db-cluster
+          Description: "Force failover"
+          Targets:
+            DBCluster: RDSClusterTarget
+      Tags:
+        ActionRef: "aws:rds:failover-db-cluster"
+
+  ### 14. RDS reboot-db-instances ###
+  FISExpTemplateRDSRebootDBInstances:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: "Reboot an RDS DB instance"
+      RoleArn: !GetAtt FISExecutionRole.Arn
+      StopConditions:
+        - Source: none
+      Targets:
+        RDSInstanceTarget:
+          ResourceType: aws:rds:db-instance
+          ResourceArns:
+            - "arn:aws:rds:ap-northeast-1:123456789012:db:YourRDSInstanceID"
+          SelectionMode: ALL
+      Actions:
+        RDSRebootDBInstances:
+          ActionId: aws:rds:reboot-db-instances
+          Description: "Reboot instance"
+          Targets:
+            DBInstance: RDSInstanceTarget
+      Tags:
+        ActionRef: "aws:rds:reboot-db-instances"
+
+  ### 15. S3 bucket-pause-replication ###
+  FISExpTemplateS3BucketPauseReplication:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: "Pause replication on an S3 bucket"
+      RoleArn: !GetAtt FISExecutionRole.Arn
+      StopConditions:
+        - Source: none
+      Targets:
+        S3BucketTarget:
+          ResourceType: aws:s3:bucket
+          ResourceArns:
+            - "arn:aws:s3:::YourBucketName"
+          SelectionMode: ALL
+      Actions:
+        S3BucketPauseReplication:
+          ActionId: aws:s3:
