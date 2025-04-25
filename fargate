@@ -1,0 +1,7 @@
+# ❶ サービス単位で確認する例
+aws ecs describe-tasks \
+  --cluster MyCluster \
+  --tasks $(aws ecs list-tasks --cluster MyCluster --service-name MyService \
+                --query 'taskArns' --output text) \
+  --query 'tasks[].attachments[?type==`ElasticNetworkInterface`].details[?name==`availabilityZone`].value' \
+  --output text
